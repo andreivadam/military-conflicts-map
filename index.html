@@ -232,28 +232,25 @@
 
     const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql';
     
+    // Highly optimized query that only grabs conflicts with exact coordinates
     const SPARQL_QUERY = `
     SELECT DISTINCT ?conflict ?conflictLabel ?coord ?startDate ?endDate ?classLabel WHERE {
       VALUES ?root { wd:Q198 wd:Q178561 wd:Q831663 wd:Q645883 wd:Q180684 }
-      ?conflict wdt:P31 ?class .
+      
+      # 1. Find the conflict types
       ?class wdt:P279* ?root .
+      
+      # 2. ONLY pull items that have an exact coordinate (This prevents the timeout)
+      ?conflict wdt:P31 ?class ;
+                wdt:P625 ?coord .
 
-      OPTIONAL { ?conflict wdt:P625 ?coordDirect . }
-      OPTIONAL { ?conflict wdt:P276/wdt:P625 ?coordViaLocation . }
-      BIND(COALESCE(?coordDirect, ?coordViaLocation) AS ?coord)
-      FILTER(BOUND(?coord))
+      # 3. Grab the dates
+      OPTIONAL { ?conflict wdt:P580 | wdt:P571 ?startDate . }
+      OPTIONAL { ?conflict wdt:P582 | wdt:P576 ?endDate . }
 
-      OPTIONAL { ?conflict wdt:P580 ?start1 . }
-      OPTIONAL { ?conflict wdt:P571 ?start2 . }
-      BIND(COALESCE(?start1, ?start2) AS ?startDate)
-
-      OPTIONAL { ?conflict wdt:P582 ?end1 . }
-      OPTIONAL { ?conflict wdt:P576 ?end2 . }
-      BIND(COALESCE(?end1, ?end2) AS ?endDate)
-
-      FILTER(BOUND(?startDate) || BOUND(?endDate))
+      # 4. Get the English labels
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-    } LIMIT 15000
+    } LIMIT 10000
     `;
 
     function setStatus(msg, cls='') {
