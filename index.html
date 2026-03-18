@@ -151,7 +151,7 @@
   <div id="controls" class="panel">
     <h1>Military Conflicts, 500 BCE → Present</h1>
     <div class="sub">
-      Interactive world map stepping through history in 100-year intervals. Data is dynamically queried from Wikidata. Note: Historical coverage is uneven; treat this as an exploratory overview.
+      Interactive world map stepping through history. Moves in 100-year intervals up to 1900, then switches to a granular year-by-year view up to the present day. Data is queried live from Wikidata.
     </div>
 
     <div class="row">
@@ -199,8 +199,16 @@
   <script>
     const PRESENT_YEAR = new Date().getFullYear();
     const TIMESTEPS = [];
-    for (let y = -500; y <= 2000; y += 100) TIMESTEPS.push(y);
-    if (!TIMESTEPS.includes(PRESENT_YEAR)) TIMESTEPS.push(PRESENT_YEAR);
+    
+    // 100-year steps from 500 BCE up to 1800 CE
+    for (let y = -500; y < 1900; y += 100) {
+      TIMESTEPS.push(y);
+    }
+    
+    // 1-year steps from 1900 up to Present Day
+    for (let y = 1900; y <= PRESENT_YEAR; y += 1) {
+      TIMESTEPS.push(y);
+    }
 
     const map = L.map('map', { preferCanvas: true, worldCopyJump: true }).setView([25, 15], 2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -232,8 +240,6 @@
 
     const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql';
     
-    // REMOVED the P279* tree traversal to prevent timeout.
-    // Explicitly targeting exact class matches for lightning-fast loading.
     const SPARQL_QUERY = `
     SELECT DISTINCT ?conflict ?conflictLabel ?coord ?startDate ?endDate ?classLabel WHERE {
       VALUES ?class { 
@@ -262,18 +268,23 @@
     function yearToLabel(y) {
       if (y < 0) return `${Math.abs(y)} BCE`;
       if (y === PRESENT_YEAR) return `Present`;
+      if (y >= 1900) return `${y}`; // Clean formatting for modern years
       return `${y} CE`;
     }
 
     function periodForIndex(idx) {
       const start = TIMESTEPS[idx];
-      const isPresent = start === PRESENT_YEAR;
-      if (isPresent) return { start, end: PRESENT_YEAR, label: `Present` };
       
-      const next = TIMESTEPS[idx + 1];
-      if (next === PRESENT_YEAR || idx === TIMESTEPS.length - 1) {
-        return { start, end: PRESENT_YEAR, label: `${yearToLabel(start)} – Present` };
+      // If we are in the granular modern era (1900+)
+      if (start >= 1900) {
+        if (start === PRESENT_YEAR) {
+          return { start, end: PRESENT_YEAR, label: `Present (${PRESENT_YEAR})` };
+        }
+        return { start, end: start, label: `${start}` };
       }
+      
+      // If we are in the historical 100-year era
+      const next = TIMESTEPS[idx + 1];
       return { start, end: next - 1, label: `${yearToLabel(start)} – ${yearToLabel(next - 1)}` };
     }
 
@@ -439,6 +450,7 @@
       playBtn.textContent = '⏸ Pause';
       playBtn.classList.remove('primary');
       
+      // Sped up to 800ms so the granular modern years don't take too long to watch
       playTimer = setInterval(() => {
         if (currentIndex >= TIMESTEPS.length - 1) {
           togglePlay();
@@ -446,7 +458,7 @@
         }
         currentIndex += 1;
         render();
-      }, 1200);
+      }, 800); 
     }
 
     async function loadData() {
