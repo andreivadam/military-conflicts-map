@@ -232,23 +232,24 @@
 
     const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql';
     
-    // Highly optimized query that only grabs conflicts with exact coordinates
+    // REMOVED the P279* tree traversal to prevent timeout.
+    // Explicitly targeting exact class matches for lightning-fast loading.
     const SPARQL_QUERY = `
     SELECT DISTINCT ?conflict ?conflictLabel ?coord ?startDate ?endDate ?classLabel WHERE {
-      VALUES ?root { wd:Q198 wd:Q178561 wd:Q831663 wd:Q645883 wd:Q180684 }
+      VALUES ?class { 
+        wd:Q198      # War
+        wd:Q178561   # Battle
+        wd:Q831663   # Military campaign
+        wd:Q645883   # Military operation
+        wd:Q188055   # Siege
+      }
       
-      # 1. Find the conflict types
-      ?class wdt:P279* ?root .
-      
-      # 2. ONLY pull items that have an exact coordinate (This prevents the timeout)
       ?conflict wdt:P31 ?class ;
                 wdt:P625 ?coord .
 
-      # 3. Grab the dates
       OPTIONAL { ?conflict wdt:P580 | wdt:P571 ?startDate . }
       OPTIONAL { ?conflict wdt:P582 | wdt:P576 ?endDate . }
 
-      # 4. Get the English labels
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     } LIMIT 10000
     `;
@@ -298,7 +299,7 @@
       const t = label.toLowerCase();
       if (t.includes('battle')) return 'battle';
       if (t.includes('war')) return 'war';
-      if (t.includes('campaign') || t.includes('operation')) return 'campaign';
+      if (t.includes('campaign') || t.includes('operation') || t.includes('siege')) return 'campaign';
       return 'other';
     }
 
