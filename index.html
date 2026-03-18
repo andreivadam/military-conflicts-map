@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Military Conflicts of the World, 500 BCE–Present</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://query.wikidata.org">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(14, 20, 40, 0.85);
+      --text: #eaf0ff;
+      --muted: #8b9bb4;
+      --accent: #6085ff;
+      --accent-hover: #84a9ff;
+      --border: rgba(255, 255, 255, 0.15);
+      --ok: #66c285;
+      --warn: #ffd27f;
+      --bad: #ff6b6b;
+    }
+    
+    html, body { 
+      margin: 0; 
+      height: 100%; 
+      background: var(--bg); 
+      color: var(--text); 
+      font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+    }
+    
+    #map { width: 100%; height: 100%; }
+    
+    .panel {
+      position: absolute; 
+      z-index: 1000; 
+      background: var(--panel); 
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border); 
+      border-radius: 12px; 
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      color: var(--text);
+    }
+    
+    #controls { top: 20px; left: 20px; width: min(480px, calc(100vw - 40px)); padding: 20px; }
+    #legend { right: 20px; bottom: 20px; width: min(340px, calc(100vw - 40px)); padding: 16px; }
+    
+    h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
+    .sub { color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .row:last-child { margin-bottom: 0; }
+    .grow { flex: 1 1 auto; }
+    
+    button, select {
+      border: 1px solid var(--border); 
+      background: rgba(255, 255, 255, 0.05); 
+      color: var(--text);
+      border-radius: 6px; 
+      padding: 8px 12px; 
+      font-size: 13px; 
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    button:hover:not(:disabled), select:hover { 
+      background: rgba(255, 255, 255, 0.1); 
+      border-color: var(--accent-hover);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+    input[type="range"] { 
+      width: 100%; 
+      accent-color: var(--accent); 
+      cursor: pointer;
+    }
+    
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+    }
+    
+    .metric { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;}
+    .metric strong { display: block; color: var(--text); font-size: 18px; font-weight: 600; margin-bottom: 2px; text-transform: none; letter-spacing: 0;}
+    
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 12px;
+      border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    
+    #status { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+    #status.error { color: var(--bad); }
+    #status.ok { color: var(--ok); }
+    #status.loading { color: var(--warn); }
+    
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: var(--warn);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: none;
+    }
+    #status.loading .spinner { display: inline-block; }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #note { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 12px; }
+    a { color: var(--accent-hover); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    
+    .year-label { min-width: 80px; font-weight: 600; font-size: 15px; color: var(--accent-hover); }
+    .footerline { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;}
+
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+    .leaflet-popup-content { font-size: 13px; line-height: 1.5; margin: 14px 16px; }
+    .leaflet-container a.leaflet-popup-close-button { color: var(--muted); padding: 6px;}
+    .leaflet-container a.leaflet-popup-close-button:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="controls" class="panel">
+    <h1>Military Conflicts, 500 BCE → Present</h1>
+    <div class="sub">
+      Interactive world map stepping through history in 100-year intervals. Data is dynamically queried from Wikidata. Note: Historical coverage is uneven; treat this as an exploratory overview.
+    </div>
+
+    <div class="row">
+      <button id="playBtn" class="primary">▶ Play</button>
+      <button id="backBtn">◀ Step</button>
+      <button id="forwardBtn">Step ▶</button>
+      <select id="modeSelect" class="grow">
+        <option value="active">Show: Active during period</option>
+        <option value="starts">Show: Starting in period</option>
+        <option value="cumulative">Show: Cumulative up to period</option>
+      </select>
+    </div>
+
+    <div class="row" style="margin: 20px 0 10px;">
+      <div class="year-label" id="yearLabel">500 BCE</div>
+      <div class="grow"><input id="yearSlider" type="range" min="0" max="0" value="0" step="1" disabled></div>
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric"><strong id="shownCount">0</strong> Shown</div>
+      <div class="metric"><strong id="totalCount">0</strong> Total Loaded</div>
+      <div class="metric"><strong id="periodText" style="font-size: 14px;">500 - 401 BCE</strong> Period</div>
+    </div>
+
+    <div class="row footerline">
+      <div id="status" class="loading"><div class="spinner"></div> <span>Waiting to load…</span></div>
+      <button id="reloadBtn">Reload Data</button>
+    </div>
+  </div>
+
+  <div id="legend" class="panel">
+    <div class="row" style="margin-bottom: 12px;">
+      <span class="pill"><span class="swatch" style="background:#ff6b6b"></span> Wars</span>
+      <span class="pill"><span class="swatch" style="background:#ffd27f"></span> Battles</span>
+      <span class="pill"><span class="swatch" style="background:#6085ff"></span> Campaigns</span>
+      <span class="pill"><span class="swatch" style="background:#b794f6"></span> Other</span>
+    </div>
+    <div style="font-size:11px; color:var(--muted); line-height:1.5">
+      Click markers for details and Wikidata links. Points represent the best available coordinate for the conflict.
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const PRESENT_YEAR = new Date().getFullYear();
+    const TIMESTEPS = [];
+    for (let y = -500; y <= 2000; y += 100) TIMESTEPS.push(y);
+    if (!TIMESTEPS.includes(PRESENT_YEAR)) TIMESTEPS.push(PRESENT_YEAR);
+
+    const map = L.map('map', { preferCanvas: true, worldCopyJump: true }).setView([25, 15], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 10,
+      minZoom: 2,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
+    }).addTo(map);
+
+    const markersLayer = L.layerGroup().addTo(map);
+
+    const playBtn = document.getElementById('playBtn');
+    const backBtn = document.getElementById('backBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+    const reloadBtn = document.getElementById('reloadBtn');
+    const yearSlider = document.getElementById('yearSlider');
+    const yearLabel = document.getElementById('yearLabel');
+    const shownCount = document.getElementById('shownCount');
+    const totalCount = document.getElementById('totalCount');
+    const periodText = document.getElementById('periodText');
+    const modeSelect = document.getElementById('modeSelect');
+    const statusEl = document.getElementById('status');
+    const statusText = statusEl.querySelector('span');
+
+    yearSlider.max = TIMESTEPS.length - 1;
+    let currentIndex = 0;
+    let isPlaying = false;
+    let playTimer = null;
+    let allConflicts = [];
+
+    const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql';
+    
+    const SPARQL_QUERY = `
+    SELECT DISTINCT ?conflict ?conflictLabel ?coord ?startDate ?endDate ?classLabel WHERE {
+      VALUES ?root { wd:Q198 wd:Q178561 wd:Q831663 wd:Q645883 wd:Q180684 }
+      ?conflict wdt:P31 ?class .
+      ?class wdt:P279* ?root .
+
+      OPTIONAL { ?conflict wdt:P625 ?coordDirect . }
+      OPTIONAL { ?conflict wdt:P276/wdt:P625 ?coordViaLocation . }
+      BIND(COALESCE(?coordDirect, ?coordViaLocation) AS ?coord)
+      FILTER(BOUND(?coord))
+
+      OPTIONAL { ?conflict wdt:P580 ?start1 . }
+      OPTIONAL { ?conflict wdt:P571 ?start2 . }
+      BIND(COALESCE(?start1, ?start2) AS ?startDate)
+
+      OPTIONAL { ?conflict wdt:P582 ?end1 . }
+      OPTIONAL { ?conflict wdt:P576 ?end2 . }
+      BIND(COALESCE(?end1, ?end2) AS ?endDate)
+
+      FILTER(BOUND(?startDate) || BOUND(?endDate))
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    } LIMIT 15000
+    `;
+
+    function setStatus(msg, cls='') {
+      statusText.textContent = msg;
+      statusEl.className = cls;
+    }
+
+    function yearToLabel(y) {
+      if (y < 0) return `${Math.abs(y)} BCE`;
+      if (y === PRESENT_YEAR) return `Present`;
+      return `${y} CE`;
+    }
+
+    function periodForIndex(idx) {
+      const start = TIMESTEPS[idx];
+      const isPresent = start === PRESENT_YEAR;
+      if (isPresent) return { start, end: PRESENT_YEAR, label: `Present` };
+      
+      const next = TIMESTEPS[idx + 1];
+      if (next === PRESENT_YEAR || idx === TIMESTEPS.length - 1) {
+        return { start, end: PRESENT_YEAR, label: `${yearToLabel(start)} – Present` };
+      }
+      return { start, end: next - 1, label: `${yearToLabel(start)} – ${yearToLabel(next - 1)}` };
+    }
+
+    function parseYear(raw) {
+      if (!raw) return null;
+      const m = String(raw).match(/^([+-]?\d{1,6})/);
+      if (!m) return null;
+      const y = parseInt(m[1], 10);
+      return Number.isFinite(y) ? y : null;
+    }
+
+    function parseCoord(wkt) {
+      if (!wkt) return null;
+      const m = String(wkt).match(/Point\(([-0-9.]+)\s+([-0-9.]+)\)/);
+      if (!m) return null;
+      const lng = parseFloat(m[1]);
+      const lat = parseFloat(m[2]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return { lat, lng };
+    }
+
+    function inferType(label='') {
+      const t = label.toLowerCase();
+      if (t.includes('battle')) return 'battle';
+      if (t.includes('war')) return 'war';
+      if (t.includes('campaign') || t.includes('operation')) return 'campaign';
+      return 'other';
+    }
+
+    function colorForType(type) {
+      if (type === 'war') return '#ff6b6b';
+      if (type === 'battle') return '#ffd27f';
+      if (type === 'campaign') return '#6085ff';
+      return '#b794f6';
+    }
+
+    function wikidataLink(uri) {
+      if (!uri) return '#';
+      const qid = uri.split('/').pop();
+      return `https://www.wikidata.org/wiki/${qid}`;
+    }
+
+    function normalizeBindings(bindings) {
+      const seen = new Map();
+
+      for (const row of bindings) {
+        const uri = row.conflict?.value;
+        const label = row.conflictLabel?.value || 'Unnamed conflict';
+        const coord = parseCoord(row.coord?.value);
+        const startYear = parseYear(row.startDate?.value);
+        const endYear = parseYear(row.endDate?.value);
+        const classLabel = row.classLabel?.value || '';
+        
+        if (!uri || !coord) continue;
+
+        const candidate = {
+          id: uri,
+          label,
+          lat: coord.lat,
+          lng: coord.lng,
+          startYear,
+          endYear,
+          classLabel,
+          type: inferType(classLabel),
+          link: wikidataLink(uri)
+        };
+
+        if (!seen.has(uri)) {
+          seen.set(uri, candidate);
+        } else {
+          const prev = seen.get(uri);
+          const prevScore = (prev.startYear != null ? 1 : 0) + (prev.endYear != null ? 1 : 0);
+          const candScore = (candidate.startYear != null ? 1 : 0) + (candidate.endYear != null ? 1 : 0);
+          if (candScore > prevScore) seen.set(uri, candidate);
+        }
+      }
+
+      return Array.from(seen.values()).filter(d => d.startYear != null || d.endYear != null);
+    }
+
+    function conflictInPeriod(conflict, mode, start, end) {
+      const s = conflict.startYear;
+      const e = conflict.endYear ?? conflict.startYear ?? PRESENT_YEAR;
+
+      if (mode === 'starts') {
+        return s != null && s >= start && s <= end;
+      }
+      if (mode === 'cumulative') {
+        return s != null && s <= end;
+      }
+
+      const startBound = s != null ? s : e;
+      const endBound = e != null ? e : s;
+      if (startBound == null && endBound == null) return false;
+      return startBound <= end && endBound >= start;
+    }
+
+    function render() {
+      if (allConflicts.length === 0) return;
+
+      const period = periodForIndex(currentIndex);
+      const mode = modeSelect.value;
+      const visible = allConflicts.filter(c => conflictInPeriod(c, mode, period.start, period.end));
+
+      markersLayer.clearLayers();
+
+      visible.forEach(c => {
+        const marker = L.circleMarker([c.lat, c.lng], {
+          radius: c.type === 'war' ? 6 : (c.type === 'battle' ? 4 : 5),
+          color: '#1a1a2e',
+          weight: 1,
+          fillColor: colorForType(c.type),
+          fillOpacity: 0.8
+        });
+        
+        const startText = c.startYear != null ? yearToLabel(c.startYear) : 'Unknown';
+        const endText = c.endYear != null ? yearToLabel(c.endYear) : (c.startYear != null ? 'Ongoing/Unknown' : 'Unknown');
+        
+        marker.bindPopup(`
+          <strong style="font-size: 15px; display: block; margin-bottom: 6px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">${escapeHtml(c.label)}</strong>
+          <strong>Type:</strong> ${escapeHtml(c.classLabel || 'N/A')}<br/>
+          <strong>Timeline:</strong> ${escapeHtml(startText)} → ${escapeHtml(endText)}<br/>
+          <div style="margin-top: 8px;">
+            <a href="${c.link}" target="_blank" rel="noopener noreferrer">View on Wikidata ↗</a>
+          </div>
+        `);
+        markersLayer.addLayer(marker);
+      });
+
+      yearSlider.value = currentIndex;
+      yearLabel.textContent = yearToLabel(period.start);
+      periodText.textContent = period.label;
+      shownCount.textContent = visible.length.toLocaleString();
+      totalCount.textContent = allConflicts.length.toLocaleString();
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, ch => ({
+        '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+      }[ch]));
+    }
+
+    function step(dir) {
+      currentIndex += dir;
+      if (currentIndex < 0) currentIndex = 0;
+      if (currentIndex > TIMESTEPS.length - 1) currentIndex = TIMESTEPS.length - 1;
+      render();
+    }
+
+    function togglePlay() {
+      if (isPlaying) {
+        clearInterval(playTimer);
+        playTimer = null;
+        isPlaying = false;
+        playBtn.textContent = '▶ Play';
+        playBtn.classList.add('primary');
+        return;
+      }
+      
+      if (currentIndex >= TIMESTEPS.length - 1) currentIndex = 0;
+      
+      isPlaying = true;
+      playBtn.textContent = '⏸ Pause';
+      playBtn.classList.remove('primary');
+      
+      playTimer = setInterval(() => {
+        if (currentIndex >= TIMESTEPS.length - 1) {
+          togglePlay();
+          return;
+        }
+        currentIndex += 1;
+        render();
+      }, 1200);
+    }
+
+    async function loadData() {
+      setStatus('Querying Wikidata (this may take a moment)…', 'loading');
+      reloadBtn.disabled = true;
+      yearSlider.disabled = true;
+      playBtn.disabled = true;
+      backBtn.disabled = true;
+      forwardBtn.disabled = true;
+      
+      try {
+        const url = WDQS_ENDPOINT + '?format=json&query=' + encodeURIComponent(SPARQL_QUERY);
+        const response = await fetch(url, {
+          headers: { 'Accept': 'application/sparql-results+json' }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        
+        allConflicts = normalizeBindings(json.results.bindings);
+        allConflicts.sort((a, b) => {
+          const ay = a.startYear ?? a.endYear ?? 999999;
+          const by = b.startYear ?? b.endYear ?? 999999;
+          return ay - by;
+        });
+        
+        setStatus(`Successfully loaded ${allConflicts.length.toLocaleString()} conflicts.`, 'ok');
+        currentIndex = 0;
+        
+        yearSlider.disabled = false;
+        playBtn.disabled = false;
+        backBtn.disabled = false;
+        forwardBtn.disabled = false;
+        
+        render();
+      } catch (err) {
+        console.error(err);
+        setStatus('Failed to load data. Wikidata might be busy. Try reloading.', 'error');
+      } finally {
+        reloadBtn.disabled = false;
+      }
+    }
+
+    playBtn.addEventListener('click', togglePlay);
+    backBtn.addEventListener('click', () => { if (isPlaying) togglePlay(); step(-1); });
+    forwardBtn.addEventListener('click', () => { if (isPlaying) togglePlay(); step(1); });
+    reloadBtn.addEventListener('click', loadData);
+    
+    yearSlider.addEventListener('input', (e) => {
+      if (isPlaying) togglePlay();
+      currentIndex = Number(e.target.value);
+      render();
+    });
+    
+    modeSelect.addEventListener('change', render);
+
+    loadData();
+  </script>
+</body>
+</html>
